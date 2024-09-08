@@ -5,7 +5,11 @@ import { env } from "process";
 const app = express();
 const port =  env.PORT || 3000;
 
-const s3 = new S3();
+
+const s3 = new S3({region: 'us-west-2', credentials: {
+  secretAccessKey: env.AWS_SECRET_KEY || '',
+  accessKeyId: env.AWS_ACCESS_KEY || ''
+}});
 
 const bucketName = env.BUCKET_NAME
 
@@ -36,6 +40,15 @@ app.get('/check-file', async (req: Request, res: Response) => {
       res.status(500).send('An error occurred while checking the file.');
     }
   }
+});
+
+
+app.get('/healthz', async (req: Request, res: Response) => {
+  res.send ("Healthy");
+});
+
+app.get('/readyz',async (req: Request, res: Response) => {
+  res.send ("Ready");
 });
 
 app.listen(port, () => {

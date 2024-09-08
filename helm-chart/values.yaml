@@ -1,0 +1,39 @@
+image:
+  repository: 905418187602.dkr.ecr.us-west-2.amazonaws.com/unleash-task
+  tag: ""
+replicas: 1
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "1024Mi"
+  requests:
+    cpu: "200m"
+    memory: "256Mi"
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 3000
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 85
