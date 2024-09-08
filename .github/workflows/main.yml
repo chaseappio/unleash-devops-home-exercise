@@ -4,7 +4,7 @@ name: pipeline
 on:
   push:
     branches: 
-     - alon-home-assignment 
+     - main 
   
 env:
   IMAGE_TAG: '0.0.3'
