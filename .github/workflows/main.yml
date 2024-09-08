@@ -1,0 +1,96 @@
+name: pipeline
+
+
+on:
+  push:
+    branches: 
+     - main 
+  
+env:
+  IMAGE_TAG: '0.0.3'
+
+jobs:
+   deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push the image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.REPO_NAME }}
+      run: |
+        # Build a docker container and push it to ECR 
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        echo "Pushing image to ECR..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+    
+    - name: Terraform Set-Up
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Terraform Plan
+      id: plan
+      run: |
+        cd terraform
+        terraform plan -var aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var bucket_name=${{ secrets.BUCKET_NAME }} -lock=false
+        echo ${{ steps.plan.outputs.stdout }}
+        echo ${{ steps.plan.outputs.stderr }}
+        echo ${{ steps.plan.outputs.exitcode }}
+
+    - name: Terraform Apply
+      id: apply
+      run: |
+        cd terraform
+        terraform apply -var aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var bucket_name=${{ secrets.BUCKET_NAME }} -lock=false -auto-approve
+        echo ${{ steps.apply.outputs.stdout }}
+        echo ${{ steps.apply.outputs.stderr }}
+        echo ${{ steps.apply.outputs.exitcode }}
+
+    - name: Configure Kubernetes client
+      uses: silverlyra/setup-aws-eks@v0.1
+      with:
+        cluster: application-cluster
+
+    - name: Install Helm
+      uses: azure/setup-helm@v4.2.0
+      with:
+         version: 'v3.9.4'
+    
+    - name: Install external secret helm chart
+      run: |
+       helm repo add external-secrets https://charts.external-secrets.io
+       sleep 15
+       helm upgrade --install external-secrets external-secrets/external-secrets
+       sleep 90
+
+
+    - name: Apply external secret operator
+      run: |
+        kubectl apply -f ./eks-eso --timeout=15s
+        sleep 15
+
+    - name: Install Application
+      run: |
+        helm upgrade --install application ./helm-chart --set image.tag=$IMAGE_TAG
+    
+ 
